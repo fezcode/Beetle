@@ -1,0 +1,52 @@
+<Application xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="Beetle.Desktop.App" RequestedThemeVariant="Dark">
+  <Application.Styles>
+    <FluentTheme>
+      <FluentTheme.Palettes><ColorPaletteResources x:Key="Dark" Accent="#35E0B0"/><!-- initial only; Themes.Apply publishes SystemAccentColor* --></FluentTheme.Palettes>
+    </FluentTheme>
+    <Style Selector="Window">
+      <Setter Property="Background" Value="{DynamicResource Beetle.Window}"/><Setter Property="Foreground" Value="{DynamicResource Beetle.TextBright}"/>
+      <Setter Property="FontFamily" Value="avares://Beetle/Assets/Fonts#DM Sans"/><Setter Property="FontSize" Value="13"/>
+    </Style>
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="7"/><Setter Property="Padding" Value="13,8"/>
+      <Setter Property="MinHeight" Value="34"/><Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/><Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Background" Value="{DynamicResource Beetle.Raised}"/><Setter Property="Foreground" Value="{DynamicResource Beetle.TextButton}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Beetle.LineButton}"/><Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontSize" Value="12"/><Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Beetle.ButtonHover}"/><Setter Property="BorderBrush" Value="{DynamicResource Beetle.LineButtonHover}"/><Setter Property="Foreground" Value="{DynamicResource Beetle.TextBright}"/>
+    </Style>
+    <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{DynamicResource Beetle.Pressed}"/><Setter Property="Foreground" Value="{DynamicResource Beetle.Accent}"/></Style>
+    <Style Selector="Button.primary"><Setter Property="Background" Value="{DynamicResource Beetle.Accent}"/><Setter Property="Foreground" Value="{DynamicResource Beetle.AccentOn}"/><Setter Property="BorderBrush" Value="{DynamicResource Beetle.Accent}"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{DynamicResource Beetle.AccentHover}"/><Setter Property="Foreground" Value="{DynamicResource Beetle.AccentOn}"/><Setter Property="BorderBrush" Value="{DynamicResource Beetle.AccentHover}"/></Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{DynamicResource Beetle.AccentPressed}"/><Setter Property="Foreground" Value="{DynamicResource Beetle.AccentOn}"/></Style>
+    <Style Selector="Button.link"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="0"/><Setter Property="MinHeight" Value="0"/><Setter Property="HorizontalContentAlignment" Value="Left"/><Setter Property="Foreground" Value="{DynamicResource Beetle.Subtle}"/></Style>
+    <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.link:pressed /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="Transparent"/><Setter Property="Foreground" Value="{DynamicResource Beetle.Accent}"/></Style>
+    <Style Selector="Button.danger"><Setter Property="Background" Value="{DynamicResource Beetle.DangerSurface}"/><Setter Property="BorderBrush" Value="{DynamicResource Beetle.DangerLine}"/><Setter Property="Foreground" Value="{DynamicResource Beetle.DangerText}"/></Style>
+    <Style Selector="Button:disabled"><Setter Property="Opacity" Value="0.45"/></Style>
+    <Style Selector="Button.chip"><Setter Property="FontSize" Value="11"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="1"/><Setter Property="BorderBrush" Value="{DynamicResource Beetle.Line}"/><Setter Property="Padding" Value="11,6"/><Setter Property="MinHeight" Value="0"/><Setter Property="Foreground" Value="{DynamicResource Beetle.Subtle}"/></Style>
+    <Style Selector="Button.chip.active"><Setter Property="Background" Value="{DynamicResource Beetle.Active}"/><Setter Property="Foreground" Value="{DynamicResource Beetle.Accent}"/><Setter Property="BorderBrush" Value="{DynamicResource Beetle.AccentIdle}"/></Style>
+    <Style Selector="Button.swatch"><Setter Property="Padding" Value="0"/><Setter Property="MinHeight" Value="0"/><Setter Property="Width" Value="30"/><Setter Property="Height" Value="30"/><Setter Property="CornerRadius" Value="8"/><Setter Property="BorderThickness" Value="1"/><Setter Property="BorderBrush" Value="{DynamicResource Beetle.Line}"/></Style>
+    <Style Selector="Button.swatch:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="BorderBrush" Value="{DynamicResource Beetle.AccentSoft}"/></Style>
+    <!-- Beetle draws its own window frame: caption glyphs inherit the button Foreground. -->
+    <Style Selector="Button.chrome">
+      <Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="0"/><Setter Property="Width" Value="46"/><Setter Property="Height" Value="50"/>
+      <Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="0"/><Setter Property="Foreground" Value="{DynamicResource Beetle.Faint}"/>
+    </Style>
+    <Style Selector="Button.chrome:pointerover"><Setter Property="Foreground" Value="{DynamicResource Beetle.TextBright}"/></Style>
+    <Style Selector="Button.chrome:pressed"><Setter Property="Foreground" Value="{DynamicResource Beetle.TextBright}"/></Style>
+    <Style Selector="Button.chrome.close:pointerover, Button.chrome.close:pressed"><Setter Property="Foreground" Value="#FFFFFF"/></Style>
+    <Style Selector="Button.chrome:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{DynamicResource Beetle.ChromeHover}"/><Setter Property="BorderBrush" Value="Transparent"/></Style>
+    <Style Selector="Button.chrome:pressed /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{DynamicResource Beetle.ChromePressed}"/><Setter Property="BorderBrush" Value="Transparent"/></Style>
+    <Style Selector="Button.chrome.close:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{DynamicResource Beetle.CloseHover}"/><Setter Property="BorderBrush" Value="Transparent"/></Style>
+    <Style Selector="Button.chrome.close:pressed /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{DynamicResource Beetle.ClosePressed}"/><Setter Property="BorderBrush" Value="Transparent"/></Style>
+    <Style Selector="Button:focus-visible /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="BorderBrush" Value="{DynamicResource Beetle.Accent}"/><Setter Property="BorderThickness" Value="1"/></Style>
+    <Style Selector="TextBox"><Setter Property="CornerRadius" Value="7"/><Setter Property="Background" Value="{DynamicResource Beetle.Field}"/><Setter Property="BorderBrush" Value="{DynamicResource Beetle.Line}"/><Setter Property="FontSize" Value="12"/><Setter Property="Padding" Value="12,9"/></Style>
+    <Style Selector="ComboBox"><Setter Property="CornerRadius" Value="7"/><Setter Property="FontSize" Value="12"/><Setter Property="Background" Value="{DynamicResource Beetle.Field}"/><Setter Property="BorderBrush" Value="{DynamicResource Beetle.Line}"/><Setter Property="MinHeight" Value="34"/></Style>
+    <Style Selector="ProgressBar"><Setter Property="Foreground" Value="{DynamicResource Beetle.Accent}"/><Setter Property="Background" Value="{DynamicResource Beetle.Line}"/><Setter Property="Height" Value="4"/><Setter Property="CornerRadius" Value="2"/></Style>
+    <Style Selector="ScrollBar"><Setter Property="Width" Value="8"/></Style>
+  </Application.Styles>
+</Application>

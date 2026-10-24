@@ -1,0 +1,96 @@
+[app]
+name = "Beetle"
+version = "0.1.0"
+id = "com.fezcode.beetle"
+icon = "Beetle.Desktop/Assets/beetle.ico"
+
+[meta]
+publisher = "Fezcode"
+comments = "Your LED strip, in tune with your screen."
+homepage = "https://github.com/fezcode/Beetle"
+support_url = "https://github.com/fezcode/Beetle/issues"
+
+[ui]
+theme = "mica"
+window_title = "Beetle Setup"
+
+[install]
+default_dir = "${LOCALAPPDATA}/Programs/Beetle"
+
+[uninstall]
+settings_dirs = ["${LOCALAPPDATA}/Fezcode/Beetle"]
+
+[[steps]]
+type = "welcome"
+title = "${app.name} ${app.version}"
+body = "This wizard will install Beetle ${app.version} on your computer.\n\nControl an ELK-BLEDOM Bluetooth LED strip: colour, brightness, and an ambient mode that follows your screen.\n\nClick Next to continue."
+
+[[steps]]
+type = "license"
+title = "License Agreement"
+body = "Please review the license terms below before continuing the installation."
+file = "LICENSE.txt"
+
+[[steps]]
+type = "folder"
+title = "Select Folder"
+body = "Choose where to install Beetle ${app.version}."
+
+[[steps]]
+type = "shortcuts"
+title = "Select Shortcuts"
+body = "Choose the shortcuts you would like the installer to create."
+
+[[steps]]
+type = "install"
+title = "Installing..."
+body = "Copying Beetle to your computer."
+
+[[steps]]
+type = "finish"
+title = "Installation Complete"
+body = "Beetle has been installed successfully.\n\nClick Finish to close the installer."
+
+[[steps.launches]]
+kind = "app"
+target = "${INSTALLDIR}/Beetle.exe"
+label = "Open Beetle"
+checked = true
+
+[[dirs]]
+src = "dist/win-x64/desktop"
+dst = "${INSTALLDIR}"
+
+[[shortcuts]]
+target = "${INSTALLDIR}/Beetle.exe"
+location = "${DESKTOP}/Beetle.lnk"
+name = "Beetle"
+app_id = "Fezcode.Beetle"
+icon = "${INSTALLDIR}/beetle.ico"
+label = "Create Desktop Shortcut"
+optional = true
+default = true
+
+[[shortcuts]]
+target = "${INSTALLDIR}/Beetle.exe"
+location = "${STARTMENU}/Beetle.lnk"
+name = "Beetle"
+app_id = "Fezcode.Beetle"
+icon = "${INSTALLDIR}/beetle.ico"
+label = "Create Start Menu Entry"
+optional = true
+default = true
+
+# Forge also writes the Windows Apps & Features uninstall record automatically.
+# Keep app.id stable: that record is how Forge detects existing installations.
+[[registry]]
+hive = "HKCU"
+key = 'Software\fezcode\Beetle'
+value = "InstallDir"
+data = "${INSTALLDIR}"
+
+[[registry]]
+hive = "HKCU"
+key = 'Software\fezcode\Beetle'
+value = "Version"
+data = "${app.version}"

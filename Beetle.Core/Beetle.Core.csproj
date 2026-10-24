@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- No external packages: BLE comes from the Windows SDK projection the TFM pulls in,
+       and the screen grab uses GDI through P/Invoke, so Core stays dependency-free. -->
+</Project>

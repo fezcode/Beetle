@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>Beetle</AssemblyName>
+    <ApplicationIcon>Assets/beetle.ico</ApplicationIcon>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Beetle.Core/Beetle.Core.csproj" />
+    <PackageReference Include="Avalonia" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.2" />
+  </ItemGroup>
+  <ItemGroup><AvaloniaResource Include="Assets/**" /></ItemGroup>
+  <!-- Shipped beside the exe so installer shortcuts can point at a real icon file. -->
+  <ItemGroup><None Include="Assets/beetle.ico" Link="beetle.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
+</Project>
