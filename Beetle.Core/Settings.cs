@@ -14,6 +14,15 @@ public sealed class AppSettings
     public string Theme { get; set; } = "carapace";
     /// <summary>Ambient colour boost, 0-100%.</summary>
     public int AmbientBoost { get; set; } = 40;
+    /// <summary>Ambient colour mode, stored by name ("Average" or "Selective") so the file stays readable.</summary>
+    public string AmbientMode { get; set; } = nameof(AmbientColorMode.Average);
+
+    [JsonIgnore]
+    public AmbientColorMode ColorMode
+    {
+        get => Enum.TryParse<AmbientColorMode>(AmbientMode, ignoreCase: true, out var mode) ? mode : AmbientColorMode.Average;
+        set => AmbientMode = value.ToString();
+    }
     // Ambient sampling area, as fractions of the primary monitor.
     public double RegionX { get; set; }
     public double RegionY { get; set; }

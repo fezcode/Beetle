@@ -45,6 +45,7 @@ public sealed class MainWindow : Window
     private Border _ambientSwatch = new();
     private TextBlock _ambientNote = Ui.MutedText("");
     private WrapPanel _regionChips = new();
+    private WrapPanel _modeChips = new();
     private Slider _boostSlider = new();
     private TextBlock _boostLabel = Ui.MutedText("");
     private TextBlock _notice = Ui.MutedText("");
@@ -254,6 +255,8 @@ public sealed class MainWindow : Window
         _ambientButton.HorizontalAlignment = HorizontalAlignment.Stretch;
         _regionChips = new WrapPanel { Orientation = Orientation.Horizontal };
         BuildRegionChips();
+        _modeChips = new WrapPanel { Orientation = Orientation.Horizontal };
+        BuildModeChips();
         _boostLabel = Ui.MutedText(BoostText(_settings.AmbientBoost), 11);
         _boostSlider = new Slider { Minimum = 0, Maximum = 100, Value = _settings.AmbientBoost, SmallChange = 1, LargeChange = 10 };
         _boostSlider.PropertyChanged += (_, e) => { if (e.Property == RangeBase.ValueProperty) OnBoost(_boostSlider.Value); };
@@ -261,6 +264,7 @@ public sealed class MainWindow : Window
         return Ui.Card(Ui.Stack(13,
             Ui.Between(Ui.Text("Ambient (screen)", 14, weight: FontWeight.SemiBold), _ambientSwatch),
             _ambientNote,
+            Ui.Stack(8, Ui.MutedText("C O L O R   M O D E", 9), _modeChips),
             Ui.Stack(8, Ui.MutedText("S A M P L E   A R E A", 9), _regionChips),
             Ui.Stack(2, Ui.Between(Ui.MutedText("C O L O R   B O O S T", 9), _boostLabel), _boostSlider),
             _ambientButton));
@@ -289,6 +293,31 @@ public sealed class MainWindow : Window
         pick.Margin = new Thickness(0, 0, 6, 6);
         ToolTip.SetTip(pick, "Drag a rectangle on your screen");
         _regionChips.Children.Add(pick);
+    }
+
+    // Average follows everything on screen; Selective sets black, white and greys aside first.
+    private void BuildModeChips()
+    {
+        _modeChips.Children.Clear();
+        var current = _settings.ColorMode;
+        var average = RegionChip("Average", current == AmbientColorMode.Average, () => SetColorMode(AmbientColorMode.Average));
+        ToolTip.SetTip(average, "Follow the average of everything in the sample area.");
+        var selective = RegionChip("Selective", current == AmbientColorMode.Selective, () => SetColorMode(AmbientColorMode.Selective));
+        ToolTip.SetTip(selective, "Ignore black, white and greys; follow only the colours that are left. With no colour on screen, the strip keeps its last colour.");
+        _modeChips.Children.Add(average);
+        _modeChips.Children.Add(selective);
+    }
+
+    private void SetColorMode(AmbientColorMode mode)
+    {
+        _settings.ColorMode = mode;
+        Save();
+        if (_sampler is not null) _sampler.Mode = mode; // takes effect on the next sample, even mid-run
+        BuildModeChips();
+        UpdateAmbientUi();
+        Notice(mode == AmbientColorMode.Selective
+            ? "Selective: following colours only; black, white and greys are ignored."
+            : "Average: following everything in the sample area.");
     }
 
     private static Button RegionChip(string name, bool active, Action select)
@@ -441,6 +470,7 @@ public sealed class MainWindow : Window
         if (!_ble.IsConnected) return;
         _sampler ??= new GdiScreenSampler();
         _sampler.Region = _settings.Region;
+        _sampler.Mode = _settings.ColorMode;
         _ambient = new AmbientController(_strip, _sampler) { Boost = _settings.AmbientBoost / 100d };
         _ambient.Sampled += color => Dispatcher.UIThread.Post(() =>
         {
@@ -516,9 +546,14 @@ public sealed class MainWindow : Window
             "Full screen" => "the whole screen",
             var preset => $"the {preset.ToLowerInvariant()} of the screen",
         };
-        _ambientNote.Text = running
-            ? $"Matching {area}. The colour picker is paused while this runs."
-            : $"Continuously matches the strip to the average colour of {area}.";
+        var selective = _settings.ColorMode == AmbientColorMode.Selective;
+        _ambientNote.Text = (running, selective) switch
+        {
+            (true, false) => $"Matching {area}. The colour picker is paused while this runs.",
+            (true, true) => $"Matching the colours in {area}, ignoring black, white and greys. The colour picker is paused while this runs.",
+            (false, false) => $"Continuously matches the strip to the average colour of {area}.",
+            (false, true) => $"Continuously matches the strip to the colours in {area}, ignoring black, white and greys.",
+        };
         _colorControls.IsEnabled = _ble.IsConnected && !running;
         StateChanged?.Invoke();
     }

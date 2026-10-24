@@ -11,7 +11,7 @@ homepage = "https://github.com/fezcode/Beetle"
 support_url = "https://github.com/fezcode/Beetle/issues"
 
 [ui]
-theme = "mica"
+theme = "huh"
 window_title = "Beetle Setup"
 
 [install]
@@ -23,7 +23,7 @@ settings_dirs = ["${LOCALAPPDATA}/Fezcode/Beetle"]
 [[steps]]
 type = "welcome"
 title = "${app.name} ${app.version}"
-body = "This wizard will install Beetle ${app.version} on your computer.\n\nControl an ELK-BLEDOM Bluetooth LED strip: colour, brightness, and an ambient mode that follows your screen.\n\nClick Next to continue."
+body = "This wizard will install Beetle ${app.version} on your computer.\n\nControl an ELK-BLEDOM Bluetooth LED strip: colour, brightness, and an ambient mode that follows your screen.\n\nBeetle runs on the .NET 10 runtime. If it is not installed, Windows offers to download it the first time Beetle starts.\n\nClick Next to continue."
 
 [[steps]]
 type = "license"

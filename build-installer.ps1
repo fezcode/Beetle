@@ -10,9 +10,13 @@ $payload = Join-Path $PSScriptRoot 'dist/win-x64/desktop/Beetle.exe'
 if (-not (Test-Path -LiteralPath $payload -PathType Leaf)) { throw 'Publish output is missing: dist/win-x64/desktop/Beetle.exe' }
 $payloadVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($payload).ProductVersion -replace '\+.*$', ''
 if ($payloadVersion -ne $version) { throw "Payload version mismatch: Beetle.exe is $payloadVersion, expected $version. Rebuild before packaging." }
-foreach ($required in @('Beetle.dll', 'Beetle.deps.json', 'Beetle.runtimeconfig.json', 'Beetle.Core.dll', 'coreclr.dll', 'hostfxr.dll', 'beetle.ico', 'LICENSE.txt')) {
+foreach ($required in @('Beetle.dll', 'Beetle.deps.json', 'Beetle.runtimeconfig.json', 'Beetle.Core.dll', 'beetle.ico', 'LICENSE.txt')) {
     if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot "dist/win-x64/desktop/$required") -PathType Leaf)) { throw "Folder publish is incomplete: desktop/$required is missing. Rebuild before packaging." }
 }
+# Beetle is framework-dependent: a bundled runtime means a stale self-contained publish slipped in.
+if (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'dist/win-x64/desktop/coreclr.dll')) { throw 'The publish bundles a .NET runtime (coreclr.dll); Beetle must be framework-dependent. Rebuild before packaging.' }
+$runtimeConfig = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'dist/win-x64/desktop/Beetle.runtimeconfig.json') -Raw | ConvertFrom-Json
+if (@($runtimeConfig.runtimeOptions.frameworks).name + @($runtimeConfig.runtimeOptions.framework).name -notcontains 'Microsoft.NETCore.App') { throw 'Beetle.runtimeconfig.json does not target the shared Microsoft.NETCore.App runtime.' }
 # A fresh staging directory prevents an old installer from being reported after a failed build.
 $installerRoot = Join-Path $PSScriptRoot 'dist/installer'
 $stage = Join-Path $installerRoot ('.installer-' + [Guid]::NewGuid().ToString('N'))

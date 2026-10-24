@@ -5,21 +5,25 @@ namespace Beetle.Core;
 /// <summary>One representative colour for whatever is on screen right now.</summary>
 public interface IScreenSampler : IDisposable
 {
-    RgbColor Sample();
+    /// <summary>The colour, or null when there is nothing to report: the grab failed, or selective
+    /// mode found only black, white and greys. Ambient mode holds its last colour on null.</summary>
+    RgbColor? Sample();
 }
 
 /// <summary>
-/// Grabs the chosen <see cref="Region"/> of the primary monitor through GDI and lets the graphics layer shrink it to a few hundred
-/// pixels with a halftone (area-averaging) stretch. Reading back that tiny image and averaging it
-/// is the whole-screen average colour, done cheaply enough to run many times a second.
+/// Grabs the chosen <see cref="Region"/> of the primary monitor through GDI and lets the graphics layer
+/// shrink it to a small image with a halftone (area-averaging) stretch, then reduces that image to one
+/// colour by <see cref="Mode"/> (see <see cref="ColorAnalysis"/>), cheaply enough to run many times a second.
+/// The image is fine enough (128x72) that a small coloured element survives the shrink as coloured
+/// pixels instead of being blended into the grey around it, which selective mode depends on.
 ///
 /// GDI is used directly rather than System.Drawing so Core needs no extra package, and the
 /// off-screen device context and bitmap are created once and reused for every frame.
 /// </summary>
 public sealed class GdiScreenSampler : IScreenSampler
 {
-    private const int SampleWidth = 64;
-    private const int SampleHeight = 36;
+    private const int SampleWidth = 128;
+    private const int SampleHeight = 72;
 
     private readonly IntPtr _screenDc;
     private readonly IntPtr _memoryDc;
@@ -28,13 +32,21 @@ public sealed class GdiScreenSampler : IScreenSampler
     private readonly byte[] _pixels = new byte[SampleWidth * SampleHeight * 4];
     private readonly Lock _regionLock = new();
     private SampleRegion _region = SampleRegion.Full;
+    private AmbientColorMode _mode = AmbientColorMode.Average;
     private bool _disposed;
 
-    /// <summary>The part of the primary monitor to average. Safe to change while sampling runs.</summary>
+    /// <summary>The part of the primary monitor to sample. Safe to change while sampling runs.</summary>
     public SampleRegion Region
     {
         get { lock (_regionLock) return _region; }
         set { lock (_regionLock) _region = value.Normalize(); }
+    }
+
+    /// <summary>How the sampled pixels become one colour. Safe to change while sampling runs.</summary>
+    public AmbientColorMode Mode
+    {
+        get { lock (_regionLock) return _mode; }
+        set { lock (_regionLock) _mode = value; }
     }
 
     public GdiScreenSampler()
@@ -45,13 +57,13 @@ public sealed class GdiScreenSampler : IScreenSampler
         _previousBitmap = SelectObject(_memoryDc, _bitmap);
     }
 
-    public RgbColor Sample()
+    public RgbColor? Sample()
     {
-        if (_disposed) return RgbColor.Black;
+        if (_disposed) return null;
 
         var screenWidth = GetSystemMetrics(SM_CXSCREEN);
         var screenHeight = GetSystemMetrics(SM_CYSCREEN);
-        if (screenWidth <= 0 || screenHeight <= 0) return RgbColor.Black;
+        if (screenWidth <= 0 || screenHeight <= 0) return null;
 
         // HALFTONE averages the source block behind each destination pixel, so the shrink itself
         // does most of the averaging work; SetBrushOrgEx is required after choosing that mode.
@@ -59,7 +71,7 @@ public sealed class GdiScreenSampler : IScreenSampler
         SetStretchBltMode(_memoryDc, STRETCH_HALFTONE);
         SetBrushOrgEx(_memoryDc, 0, 0, IntPtr.Zero);
         if (!StretchBlt(_memoryDc, 0, 0, SampleWidth, SampleHeight, _screenDc, srcX, srcY, srcW, srcH, SRCCOPY))
-            return RgbColor.Black;
+            return null;
 
         var header = new BITMAPINFOHEADER
         {
@@ -71,17 +83,9 @@ public sealed class GdiScreenSampler : IScreenSampler
             biCompression = BI_RGB,
         };
         if (GetDIBits(_memoryDc, _bitmap, 0, SampleHeight, _pixels, ref header, DIB_RGB_COLORS) == 0)
-            return RgbColor.Black;
+            return null;
 
-        long r = 0, g = 0, b = 0;
-        var count = SampleWidth * SampleHeight;
-        for (var i = 0; i < _pixels.Length; i += 4)
-        {
-            b += _pixels[i];     // GDI packs pixels as BGRA
-            g += _pixels[i + 1];
-            r += _pixels[i + 2];
-        }
-        return new RgbColor((byte)(r / count), (byte)(g / count), (byte)(b / count));
+        return ColorAnalysis.Reduce(_pixels, Mode); // GDI packs the pixels as BGRA
     }
 
     public void Dispose()

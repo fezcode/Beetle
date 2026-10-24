@@ -53,8 +53,10 @@ public sealed class AmbientController(StripController strip, IScreenSampler samp
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                var target = sampler.Sample().Boost(Boost);
-                current = current.LerpTo(target, Smoothing);
+                // No sample (selective mode saw only black, white and greys, or the grab failed): hold
+                // the current colour rather than easing toward black, so the strip doesn't jump around.
+                if (sampler.Sample() is { } sample)
+                    current = current.LerpTo(sample.Boost(Boost), Smoothing);
                 Sampled?.Invoke(current);
 
                 if (first || current.MaxChannelDelta(lastSent) >= SendThreshold)

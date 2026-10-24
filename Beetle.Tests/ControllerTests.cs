@@ -15,9 +15,9 @@ file sealed class FakeTransport : ILedTransport
     }
 }
 
-file sealed class FixedSampler(RgbColor color) : IScreenSampler
+file sealed class FixedSampler(RgbColor? color) : IScreenSampler
 {
-    public RgbColor Sample() => color;
+    public RgbColor? Sample() => color;
     public void Dispose() { }
 }
 
@@ -84,5 +84,27 @@ public class AmbientControllerTests
         Assert.False(ambient.IsRunning);
         Assert.True(sampled > 0, "expected at least one sample");
         Assert.Contains(transport.Frames, f => f.Length == 9 && f[2] == 0x05); // a colour frame went out
+    }
+
+    [Fact]
+    public async Task With_nothing_coloured_to_follow_the_strip_holds_its_colour()
+    {
+        var transport = new FakeTransport();
+        var strip = new StripController(transport);
+        var held = new RgbColor(10, 200, 90);
+        await strip.SetColorAsync(held);
+        transport.Frames.Clear();
+        var ambient = new AmbientController(strip, new FixedSampler(null)) { IntervalMs = 10, Smoothing = 1.0 };
+        var reported = new List<RgbColor>();
+        ambient.Sampled += c => { lock (reported) reported.Add(c); };
+
+        ambient.Start();
+        await Task.Delay(120);
+        ambient.Stop();
+
+        Assert.NotEmpty(reported);
+        Assert.All(reported, c => Assert.Equal(held, c));
+        // Only the loop's opening frame may go out, and it repeats the colour already showing.
+        Assert.All(transport.Frames.Where(f => f[2] == 0x05), f => Assert.Equal(LedCommands.Color(held), f));
     }
 }

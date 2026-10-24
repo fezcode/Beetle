@@ -4,7 +4,7 @@
 .EXAMPLE
   .\build.ps1 -Run                  # build and launch
   .\build.ps1 -Test                 # build and run the test suite
-  .\build.ps1 -Test -Publish        # release gate: tests, then a self-contained dist/win-x64/desktop
+  .\build.ps1 -Test -Publish        # release gate: tests, then a framework-dependent dist/win-x64/desktop
 #>
 param(
     [ValidateSet('Debug', 'Release')][string]$Configuration = 'Release',
@@ -38,7 +38,10 @@ try {
             if ($items | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) { throw "Refusing to clean linked publish output: $outputPath" }
             Remove-Item -LiteralPath $outputPath -Recurse -Force
         }
-        Invoke-DotNet @('publish', 'Beetle.Desktop/Beetle.Desktop.csproj', '-c', $Configuration, '-r', $Runtime, '--self-contained', 'true', '-p:PublishSingleFile=false', '-p:IncludeNativeLibrariesForSelfExtract=false', '-p:DebugType=None', '--nologo', '-o', "dist/$Runtime/desktop")
+        # Framework-dependent: Beetle ships only its own files and runs on the installed .NET 10
+        # runtime. The apphost (Beetle.exe) shows Windows' standard ".NET is required" prompt, with a
+        # download link, on a machine without it.
+        Invoke-DotNet @('publish', 'Beetle.Desktop/Beetle.Desktop.csproj', '-c', $Configuration, '-r', $Runtime, '--self-contained', 'false', '-p:PublishSingleFile=false', '-p:DebugType=None', '--nologo', '-o', "dist/$Runtime/desktop")
         Get-ChildItem -LiteralPath $outputPath -File -Filter '*.pdb' | ForEach-Object { Remove-Item -LiteralPath $_.FullName }
     }
     if ($Run) { Invoke-DotNet @('run', '--project', 'Beetle.Desktop', '-c', $Configuration, '--no-build') }

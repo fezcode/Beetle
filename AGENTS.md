@@ -52,7 +52,7 @@ steps in order and stop/report any failure before proceeding:
 1. Run `./version.ps1 -Bump patch` by default, or `-Set x.y.z` for a requested
    version. Clarify conflicting/ambiguous version instructions. Run
    `./version.ps1` to verify.
-2. Run `./build.ps1 -Test -Publish` to build, test, and publish the self-contained
+2. Run `./build.ps1 -Test -Publish` to build, test, and publish the framework-dependent
    desktop app into `dist/win-x64/desktop`. Do not skip tests for a release.
    Replacing this output closes any running Beetle window using it; report that
    effect and respect authorization already given.
@@ -85,7 +85,8 @@ the Windows asset as `Beetle-Setup-<version>.exe`; keep that filename.
   live in `dist/installer` as `Beetle-Setup-<version>.exe`, matching the other
   Fezcode apps. Keep Forge, build scripts and the README consistent with this
   layout. Never clean the whole `dist` directory or delete previous installers.
-- Keep `forge.toml` on the Mica wizard theme, using Beetle's icon and identity.
+- Keep `forge.toml` on the `huh` wizard theme, using Beetle's icon and identity.
+  `scripts/verify-installer.ps1` rejects any other theme.
 - Keep the six wizard steps in order: welcome, license, folder, shortcuts,
   install, finish. Use `LICENSE.txt` for the MIT agreement, offer optional
   Desktop and Start Menu shortcuts, and keep Open Beetle selected on Finish.
@@ -96,9 +97,16 @@ the Windows asset as `Beetle-Setup-<version>.exe`; keep that filename.
 - Packaging verifies the embedded manifest (`scripts/verify-installer.ps1`), not
   only the source TOML or EXE timestamp. A successful diagnostic is not a
   substitute for checking the visible wizard.
-- Publish self-contained folders with `PublishSingleFile=false`. DLLs, native
-  libraries, `.deps.json` and `.runtimeconfig.json` must remain alongside the
-  executable; never distribute only the apphost EXE.
+- Publish **framework-dependent**, not self-contained: `--self-contained false`
+  with `-r win-x64` and `PublishSingleFile=false`. Beetle ships only its own files
+  and runs on the installed .NET 10 runtime (`Microsoft.NETCore.App`); the apphost
+  shows Windows' ".NET is required" prompt when it is missing. Packaging fails if
+  the publish bundles a runtime (`coreclr.dll`). DLLs, native libraries,
+  `.deps.json` and `.runtimeconfig.json` must remain alongside the executable;
+  never distribute only the apphost EXE.
+- Every build configuration embeds `Assets/beetle.ico` through `ApplicationIcon`.
+  A `bin/Debug` exe built before that setting existed has no icon; rebuild rather
+  than trusting a stale output.
 - Preserve user data under `%LOCALAPPDATA%/Fezcode/Beetle` unless the user
   chooses the installer's option to remove settings/data.
 - Fail on inconsistent versions, failed tests/publishing, missing payload, or
@@ -121,6 +129,15 @@ These flows are adapted from Airlift's and clockt's `AGENTS.md`.
 - Ambient mode samples a `SampleRegion` of the primary monitor, expressed as
   fractions so it survives resolution and DPI changes. Colour boost applies only
   to ambient samples; manual colours are sent exactly as picked.
+- `ColorAnalysis` reduces the sampled pixels by `AmbientColorMode`: `Average`, or
+  `Selective`, which keeps only pixels with saturation >= 0.25 and value >= 0.15
+  (dropping black, white and greys). Selective returns null when nothing coloured
+  is left, and `AmbientController` then holds its current colour instead of easing
+  toward black. The 128x72 sample size exists so small coloured elements survive
+  the halftone shrink; do not lower it without re-checking selective mode.
+- On-screen sampler tests are only meaningful when nothing fullscreen (a game)
+  covers the staged pattern; capture what was actually on screen before trusting
+  a result.
 - Beetle is a tray app. The desktop lifetime uses `ShutdownMode.OnExplicitShutdown`;
   closing the window hides it and keeps the strip and ambient mode running. Only the
   tray's Quit, or an OS/application shutdown, runs the real shutdown (stop ambient,

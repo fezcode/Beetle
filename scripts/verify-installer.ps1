@@ -23,7 +23,8 @@ try {
     }
     $manifest = (Read-Entry 'manifest.json') | ConvertFrom-Json
     if ($manifest.app.id -ne 'com.fezcode.beetle' -or $manifest.app.version -ne $Version) { throw 'Incorrect installer identity/version.' }
-    if ($manifest.ui.theme -ne 'mica') { throw 'Installer must use Mica.' }
+    if ($manifest.ui.theme -ne 'huh') { throw 'Installer must use the huh theme.' }
+    if (@($manifest.files.dst) -contains '${INSTALLDIR}/coreclr.dll') { throw 'Installer bundles a .NET runtime; Beetle must be framework-dependent.' }
     if (($manifest.steps.type -join ',') -ne 'welcome,license,folder,shortcuts,install,finish') { throw 'Installer must contain all six wizard steps in order.' }
     if ((Read-Entry $manifest.steps[1].file) -notmatch 'MIT License') { throw 'MIT license agreement is missing.' }
     if (@($manifest.shortcuts).Count -ne 2) { throw 'Expected Desktop and Start Menu choices.' }

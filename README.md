@@ -24,6 +24,10 @@ other Fezcode apps. No cloud, no account, no background service: just the app an
 - **Brightness**: the strip's hardware brightness, 0 to 100%.
 - **Ambient mode**: samples your screen about 25 times a second and eases the strip toward its
   average colour.
+  - **Color mode**: **Average** follows everything in the sample area. **Selective** first sets
+    aside black, white and greys and follows only the colours that are left, so a red logo on a
+    white page lights the strip red rather than a washed-out pink. With no colour on screen at all,
+    the strip keeps its last colour.
   - **Sample area**: follow the full screen, the center, an edge, or drag out any area you like.
   - **Colour boost**: brightens and saturates colourful parts of the screen so a dark red reads as
     red on the strip, while dark greys and black stay dark.
@@ -42,6 +46,10 @@ other Fezcode apps. No cloud, no account, no background service: just the app an
 Run `Beetle-Setup-0.1.0.exe`, attached to the [GitHub releases](https://github.com/fezcode/Beetle/releases).
 It installs per user, offers Desktop and Start Menu shortcuts, and keeps your settings when you
 uninstall. Beetle is also listed in [Airlift](https://github.com/fezcode/Airlift).
+
+Beetle runs on the [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0), which
+the installer does not bundle. If it is missing, Windows offers to download it the first time
+Beetle starts.
 
 ## Use
 
@@ -67,7 +75,7 @@ Requires the .NET 10 SDK on Windows.
 ```powershell
 .\build.ps1 -Run              # build and launch
 .\build.ps1 -Test             # build and run the tests
-.\build.ps1 -Test -Publish    # tests, then a self-contained dist/win-x64/desktop
+.\build.ps1 -Test -Publish    # tests, then a framework-dependent dist/win-x64/desktop
 .\build-installer.ps1 -SkipBuild   # package dist/installer/Beetle-Setup-0.1.0.exe with Forge
 .\version.ps1                 # check the version is consistent everywhere
 ```
@@ -83,16 +91,18 @@ See [AGENTS.md](AGENTS.md) for the full release flow.
 - **Protocol.** Commands are the 9-byte ELK-BLEDOM frames, `7E ... EF`, in `LedCommands.cs`. The
   vendor publishes no protocol; these come from community reverse-engineering, so a frame that
   misbehaves on a particular unit is a one-line change there.
-- **Ambient.** `GdiScreenSampler` shrinks the chosen area of the primary monitor to a small bitmap
-  with a halftone (area-averaging) stretch and averages it. `AmbientController` applies the colour
+- **Ambient.** `GdiScreenSampler` shrinks the chosen area of the primary monitor to a 128x72 bitmap
+  with a halftone (area-averaging) stretch and reduces it to one colour (`ColorAnalysis`): the plain
+  average, or in selective mode the average of only the pixels with at least 25% saturation and 15%
+  brightness. `AmbientController` applies the colour
   boost, eases the strip toward each sample, and sends a frame only when the colour has moved
   enough to be worth a write. The strip is a single zone, so it shows one colour at a time.
 
 | Project | Contents |
 |---|---|
-| `Beetle.Core` | Colour maths, command frames, Bluetooth transport, screen sampler, controllers, settings. No UI dependency. |
+| `Beetle.Core` | Colour maths, selective colour analysis, command frames, Bluetooth transport, screen sampler, controllers, settings. No UI dependency. |
 | `Beetle.Desktop` | The Avalonia app: theme, UI helpers, window chrome, colour picker, area picker, tray icon, main window. |
-| `Beetle.Tests` | xUnit tests for frame encoding, colour maths, boost, sample areas and controller behaviour. |
+| `Beetle.Tests` | xUnit tests for frame encoding, colour maths, boost, selective analysis, sample areas and controller behaviour. |
 
 ## Limits
 
