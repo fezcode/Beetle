@@ -4,7 +4,7 @@
   a small spaced header, the lowercase name, a byline, a one-line description, a dashed rule, the
   language tag and the repository URL, with artwork on the right.
 .DESCRIPTION
-  Uses the app's bundled DM Sans and Manrope and draws the mark from beetle.svg (scripts/mark.ps1).
+  Uses the app's bundled DM Sans and Manrope and draws the approved raster mark (scripts/mark.ps1).
 #>
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'mark.ps1')

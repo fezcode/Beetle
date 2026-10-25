@@ -168,9 +168,10 @@ These flows are adapted from Airlift's and clockt's `AGENTS.md`.
   C# reads `Themes.Brush(p => p.<Role>)`. Every role is `required`, so an
   incomplete palette will not compile. Colour built in code is resolved once, so
   the window is rebuilt when the palette changes.
-- `Beetle.Desktop/Assets/beetle.svg` is the single source for the mark: the app
-  draws it, `scripts/create-app-icon.ps1` renders `beetle.png` and the multi-size
-  `beetle.ico` from it, and `scripts/create-banner.ps1` renders the README's
-  `banner-image.png`. Both share `scripts/mark.ps1`. Re-run them after editing the SVG.
+- `Beetle.Desktop/Assets/icon-master.png` is the approved transparent source for
+  the mark. `scripts/create-app-icon.ps1` exports `beetle.png`, the multi-size
+  `beetle.ico` and a raster-backed `beetle.svg` wrapper. The app loads `beetle.png`;
+  `scripts/create-banner.ps1` draws the master through `scripts/mark.ps1`.
+  Re-run the exporters after replacing the master; icon export requires Pillow.
 - README screenshots live in `docs/screenshots`. Capture only Beetle's own window
   (`PrintWindow`), never the desktop, and keep personal information out of them.

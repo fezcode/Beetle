@@ -130,3 +130,7 @@ See [AGENTS.md](AGENTS.md) for the full release flow.
 
 [MIT](LICENSE.txt). The bundled fonts, DM Sans and Manrope, keep their own SIL Open Font Licenses.
 [NAudio](https://github.com/naudio/NAudio) is used under the MIT License.
+
+## Application icon
+
+The approved transparent artwork is `Beetle.Desktop/Assets/icon-master.png`. Run `python scripts/make-icon.py` with Python and Pillow to regenerate the PNG sizes, Windows ICO and raster-backed SVG wrapper. Generated assets are committed; normal builds do not require Python.
