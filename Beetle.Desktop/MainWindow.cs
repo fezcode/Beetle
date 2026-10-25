@@ -20,6 +20,9 @@ public sealed class MainWindow : Window
     private readonly StripController _strip;
     private GdiScreenSampler? _sampler;
     private AmbientController? _ambient;
+    private RainbowController? _rainbow;
+    private MusicController? _music;
+    private LoopbackAudioSource? _audio;
 
     private RgbColor _color;
     private IReadOnlyList<BleDeviceInfo> _devices = [];
@@ -47,6 +50,17 @@ public sealed class MainWindow : Window
     private WrapPanel _regionChips = new();
     private WrapPanel _modeChips = new();
     private Slider _boostSlider = new();
+    private Button _rainbowButton = new();
+    private Border _rainbowSwatch = new();
+    private TextBlock _rainbowNote = Ui.MutedText("");
+    private TextBlock _rainbowSpeedLabel = Ui.MutedText("");
+    private Slider _rainbowSpeed = new();
+    private Button _musicButton = new();
+    private Border _musicSwatch = new();
+    private TextBlock _musicNote = Ui.MutedText("");
+    private TextBlock _musicSensitivityLabel = Ui.MutedText("");
+    private Slider _musicSensitivity = new();
+    private StackPanel _musicColors = new();
     private TextBlock _boostLabel = Ui.MutedText("");
     private TextBlock _notice = Ui.MutedText("");
 
@@ -73,6 +87,8 @@ public sealed class MainWindow : Window
         _ble.ConnectionChanged += connected => Dispatcher.UIThread.Post(() =>
         {
             if (!connected && _ambient is { IsRunning: true }) StopAmbient();
+            if (!connected && _rainbow is { IsRunning: true }) StopRainbow();
+            if (!connected && _music is { IsRunning: true }) StopMusic();
             UpdateConnectionUi();
             Notice(connected ? $"Connected to {_ble.ConnectedName}." : "Disconnected.");
         });
@@ -106,6 +122,9 @@ public sealed class MainWindow : Window
     public bool IsConnected => _ble.IsConnected;
     public bool IsStripOn => _strip.IsOn;
     public bool IsAmbientRunning => _ambient is { IsRunning: true };
+    public bool IsRainbowRunning => _rainbow is { IsRunning: true };
+    public bool IsMusicRunning => _music is { IsRunning: true };
+    private bool AnyEffectRunning => IsAmbientRunning || IsRainbowRunning || IsMusicRunning;
     public string? StripName => _ble.ConnectedName;
 
     public void ShowFromTray()
@@ -116,6 +135,10 @@ public sealed class MainWindow : Window
     }
 
     public void ToggleAmbientFromTray() => ToggleAmbient();
+
+    public void ToggleRainbowFromTray() => ToggleRainbow();
+
+    public void ToggleMusicFromTray() => ToggleMusic();
 
     public Task TogglePowerFromTray() => SetPower(!_strip.IsOn);
 
@@ -163,7 +186,7 @@ public sealed class MainWindow : Window
             Ui.Stack(4, Ui.Text("Your strip", 22, p => p.TextBright, FontWeight.SemiBold), Ui.MutedText("ELK-BLEDOM over Bluetooth LE", 12)),
             theme);
 
-        var body = Ui.Stack(15, header, ConnectionCard(), PowerCard(), ColorCard(), BrightnessCard(), AmbientCard(), Footer());
+        var body = Ui.Stack(15, header, ConnectionCard(), PowerCard(), ColorCard(), BrightnessCard(), AmbientCard(), RainbowCard(), MusicCard(), Footer());
         body.Margin = new Thickness(22, 18, 22, 24);
 
         UpdateConnectionUi();
@@ -355,6 +378,125 @@ public sealed class MainWindow : Window
         }
     }
 
+    private Control RainbowCard()
+    {
+        _rainbowSwatch = new Border { Width = 26, Height = 26, CornerRadius = new CornerRadius(7), BorderThickness = new Thickness(1), BorderBrush = Ui.Line, Background = Themes.Brush(p => p.Field) };
+        _rainbowNote = Ui.MutedText("", 11);
+        _rainbowSpeedLabel = Ui.MutedText(CycleText(_settings.RainbowCycleSeconds), 11);
+        // The slider reads as speed (faster to the right); the stored value is seconds per cycle.
+        _rainbowSpeed = new Slider { Minimum = 1, Maximum = 20, Value = SpeedFor(_settings.RainbowCycleSeconds), SmallChange = 1, LargeChange = 2 };
+        _rainbowSpeed.PropertyChanged += (_, e) => { if (e.Property == RangeBase.ValueProperty) OnRainbowSpeed(_rainbowSpeed.Value); };
+        ToolTip.SetTip(_rainbowSpeed, "How fast the strip travels round the colour wheel. Takes effect while it runs.");
+        _rainbowButton = Ui.Button("Start rainbow", ToggleRainbow, "primary");
+        _rainbowButton.HorizontalAlignment = HorizontalAlignment.Stretch;
+        return Ui.Card(Ui.Stack(13,
+            Ui.Between(Ui.Text("Rainbow", 14, weight: FontWeight.SemiBold), _rainbowSwatch),
+            _rainbowNote,
+            Ui.Stack(2, Ui.Between(Ui.MutedText("S P E E D", 9), _rainbowSpeedLabel), _rainbowSpeed),
+            _rainbowButton));
+    }
+
+    // Speed 1..20 maps to 60 s..3 s per trip round the wheel.
+    private static double CycleFor(double speed) => 60 / Math.Clamp(speed, 1, 20);
+    private static double SpeedFor(double cycleSeconds) => Math.Clamp(60 / cycleSeconds, 1, 20);
+    private static string CycleText(double cycleSeconds) => $"{cycleSeconds:0.#} s per cycle";
+
+    private void OnRainbowSpeed(double speed)
+    {
+        var cycle = CycleFor(speed);
+        _settings.RainbowCycleSeconds = cycle;
+        _rainbowSpeedLabel.Text = CycleText(cycle);
+        if (_rainbow is not null) _rainbow.CycleSeconds = cycle;
+    }
+
+    private Control MusicCard()
+    {
+        _musicSwatch = new Border { Width = 26, Height = 26, CornerRadius = new CornerRadius(7), BorderThickness = new Thickness(1), BorderBrush = Ui.Line, Background = Themes.Brush(p => p.Field) };
+        _musicNote = Ui.MutedText("", 11);
+        _musicSensitivityLabel = Ui.MutedText($"{_settings.MusicSensitivity}%", 11);
+        _musicSensitivity = new Slider { Minimum = 0, Maximum = 100, Value = _settings.MusicSensitivity, SmallChange = 1, LargeChange = 10 };
+        _musicSensitivity.PropertyChanged += (_, e) => { if (e.Property == RangeBase.ValueProperty) OnMusicSensitivity(_musicSensitivity.Value); };
+        ToolTip.SetTip(_musicSensitivity, "How strongly loudness drives brightness. Takes effect while it runs.");
+        _musicButton = Ui.Button("Start music", ToggleMusic, "primary");
+        _musicButton.HorizontalAlignment = HorizontalAlignment.Stretch;
+        _musicColors = Ui.Stack(8);
+        BuildMusicColors();
+        return Ui.Card(Ui.Stack(13,
+            Ui.Between(Ui.Text("Music", 14, weight: FontWeight.SemiBold), _musicSwatch),
+            _musicNote,
+            _musicColors,
+            Ui.Stack(2, Ui.Between(Ui.MutedText("S E N S I T I V I T Y", 9), _musicSensitivityLabel), _musicSensitivity),
+            _musicButton));
+    }
+
+    // The colours each beat steps through. A swatch toggles in or out; picked ones show their place in
+    // the order. Custom colours (added from the Color card) appear after the presets so they can be removed.
+    private void BuildMusicColors()
+    {
+        _musicColors.Children.Clear();
+        var picked = _settings.MusicPalette;
+        var whole = RegionChip("All colours", picked.Count == 0, () => SetMusicPalette([]));
+        ToolTip.SetTip(whole, "Move round the whole colour wheel, drifting between beats.");
+        var add = RegionChip("Add picked colour", false, () => ToggleMusicColor(_color.ToHex(), addOnly: true));
+        ToolTip.SetTip(add, $"Add the Color card's current colour ({_color.ToHex()}) to the beat colours.");
+        _musicColors.Children.Add(Ui.Between(Ui.MutedText("B E A T   C O L O R S", 9), Ui.MutedText(picked.Count == 0 ? "whole wheel" : $"{picked.Count} picked", 11)));
+        _musicColors.Children.Add(new WrapPanel { Orientation = Orientation.Horizontal, Children = { whole, add } });
+
+        var swatches = new WrapPanel { Orientation = Orientation.Horizontal };
+        var choices = Presets.Select(p => p.ToHex())
+            .Concat(picked.Where(hex => Presets.All(p => !p.ToHex().Equals(hex, StringComparison.OrdinalIgnoreCase))));
+        foreach (var hex in choices)
+        {
+            if (!RgbColor.TryParseHex(hex, out var color)) continue;
+            var place = picked.FindIndex(h => h.Equals(hex, StringComparison.OrdinalIgnoreCase));
+            var swatch = Ui.Button("", () => ToggleMusicColor(hex), "swatch");
+            swatch.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
+            swatch.Margin = new Thickness(0, 0, 7, 7);
+            if (place >= 0)
+            {
+                swatch.Classes.Add("selected");
+                // Dark ink on light colours, light ink on dark ones, so the number always reads.
+                var light = (0.299 * color.R + 0.587 * color.G + 0.114 * color.B) / 255 > 0.6;
+                swatch.Content = new TextBlock
+                {
+                    Text = (place + 1).ToString(), FontSize = 11, FontWeight = FontWeight.Bold,
+                    Foreground = light ? Brushes.Black : Brushes.White,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                };
+            }
+            ToolTip.SetTip(swatch, place >= 0 ? $"{hex}: beat colour {place + 1}. Click to remove." : $"{hex}: click to add.");
+            Avalonia.Automation.AutomationProperties.SetName(swatch, $"Beat colour {hex}");
+            swatches.Children.Add(swatch);
+        }
+        _musicColors.Children.Add(swatches);
+    }
+
+    private void ToggleMusicColor(string hex, bool addOnly = false)
+    {
+        var palette = _settings.MusicPalette.ToList();
+        var at = palette.FindIndex(h => h.Equals(hex, StringComparison.OrdinalIgnoreCase));
+        if (at >= 0) { if (addOnly) return; palette.RemoveAt(at); }
+        else palette.Add(hex.ToUpperInvariant());
+        SetMusicPalette(palette);
+    }
+
+    private void SetMusicPalette(List<string> palette)
+    {
+        _settings.MusicPalette = palette;
+        Save();
+        if (_music is not null) _music.Palette = _settings.MusicColors; // takes effect on the next beat
+        BuildMusicColors();
+        UpdateAmbientUi();
+    }
+
+    private void OnMusicSensitivity(double value)
+    {
+        var percent = (int)Math.Round(value);
+        _musicSensitivityLabel.Text = $"{percent}%";
+        _settings.MusicSensitivity = percent;
+        if (_music is not null) _music.Sensitivity = percent / 100d;
+    }
+
     private Control Footer()
     {
         _notice = Ui.MutedText("Scan to find your strip, then connect.", 11);
@@ -468,6 +610,7 @@ public sealed class MainWindow : Window
     private void StartAmbient()
     {
         if (!_ble.IsConnected) return;
+        StopOtherEffects(keep: "ambient");
         _sampler ??= new GdiScreenSampler();
         _sampler.Region = _settings.Region;
         _sampler.Mode = _settings.ColorMode;
@@ -490,6 +633,84 @@ public sealed class MainWindow : Window
         _ambient = null;
         UpdateAmbientUi();
         Notice("Ambient mode off.");
+    }
+
+    private void ToggleRainbow()
+    {
+        if (_rainbow is { IsRunning: true }) StopRainbow();
+        else StartRainbow();
+    }
+
+    private void StartRainbow()
+    {
+        if (!_ble.IsConnected) return;
+        StopOtherEffects(keep: "rainbow");
+        _rainbow = new RainbowController(_strip) { CycleSeconds = _settings.RainbowCycleSeconds };
+        _rainbow.Sampled += color => Dispatcher.UIThread.Post(() =>
+        {
+            _rainbowSwatch.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
+            ShowColor(color);
+        });
+        _rainbow.Faulted += error => Dispatcher.UIThread.Post(() => { StopRainbow(); Notice(error.Message, true); });
+        _rainbow.Start();
+        UpdatePowerUi();
+        UpdateAmbientUi();
+        Notice("Rainbow on.");
+    }
+
+    private void StopRainbow()
+    {
+        _rainbow?.Stop();
+        _rainbow = null;
+        UpdateAmbientUi();
+        Notice("Rainbow off.");
+    }
+
+    private void ToggleMusic()
+    {
+        if (_music is { IsRunning: true }) StopMusic();
+        else StartMusic();
+    }
+
+    private void StartMusic()
+    {
+        if (!_ble.IsConnected) return;
+        StopOtherEffects(keep: "music");
+        _audio ??= new LoopbackAudioSource();
+        var music = new MusicController(_strip, _audio) { Sensitivity = _settings.MusicSensitivity / 100d, Palette = _settings.MusicColors };
+        music.Sampled += color => Dispatcher.UIThread.Post(() =>
+        {
+            _musicSwatch.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
+            ShowColor(color);
+        });
+        music.Faulted += error => Dispatcher.UIThread.Post(() => { StopMusic(); Notice(error.Message, true); });
+        try { music.Start(); }
+        catch (Exception error)
+        {
+            // Usually no output device to listen to (none enabled, or one being reconfigured).
+            Notice($"Could not listen to your PC's audio: {error.Message}", true);
+            return;
+        }
+        _music = music;
+        UpdatePowerUi();
+        UpdateAmbientUi();
+        Notice("Music mode on — reacting to what your PC is playing.");
+    }
+
+    private void StopMusic()
+    {
+        _music?.Stop();
+        _music = null;
+        UpdateAmbientUi();
+        Notice("Music mode off.");
+    }
+
+    // Ambient, rainbow and music each drive the strip on their own; only one runs at a time.
+    private void StopOtherEffects(string keep)
+    {
+        if (keep != "ambient" && IsAmbientRunning) StopAmbient();
+        if (keep != "rainbow" && IsRainbowRunning) StopRainbow();
+        if (keep != "music" && IsMusicRunning) StopMusic();
     }
 
     private void CycleTheme()
@@ -522,7 +743,9 @@ public sealed class MainWindow : Window
         _onButton.IsEnabled = _offButton.IsEnabled = connected;
         _brightness.IsEnabled = connected;
         _ambientButton.IsEnabled = connected;
-        _colorControls.IsEnabled = connected && _ambient is not { IsRunning: true };
+        _rainbowButton.IsEnabled = connected;
+        _musicButton.IsEnabled = connected;
+        _colorControls.IsEnabled = connected && !AnyEffectRunning;
         StateChanged?.Invoke();
     }
 
@@ -554,7 +777,29 @@ public sealed class MainWindow : Window
             (false, false) => $"Continuously matches the strip to the average colour of {area}.",
             (false, true) => $"Continuously matches the strip to the colours in {area}, ignoring black, white and greys.",
         };
-        _colorControls.IsEnabled = _ble.IsConnected && !running;
+        // Rainbow and music share this refresh: every effect pauses the colour picker and they exclude each other.
+        var rainbow = IsRainbowRunning;
+        _rainbowButton.Content = rainbow ? "Stop rainbow" : "Start rainbow";
+        _rainbowButton.Classes.Set("primary", !rainbow);
+        _rainbowButton.Classes.Set("danger", rainbow);
+        _rainbowNote.Text = rainbow
+            ? "Cycling through every colour. The colour picker is paused while this runs."
+            : "Cycles the strip smoothly through every colour of the rainbow.";
+        var music = IsMusicRunning;
+        _musicButton.Content = music ? "Stop music" : "Start music";
+        _musicButton.Classes.Set("primary", !music);
+        _musicButton.Classes.Set("danger", music);
+        var beatColours = _settings.MusicPalette.Count;
+        var onBeat = beatColours switch
+        {
+            0 => "beats move round the colour wheel",
+            1 => "the colour is the one you picked",
+            _ => $"each beat jumps to the next of your {beatColours} colours",
+        };
+        _musicNote.Text = music
+            ? $"Reacting to what your PC is playing: loudness sets the brightness, {onBeat}."
+            : $"Reacts to whatever your PC is playing, music, video or games. Brightness follows loudness; {onBeat}.";
+        _colorControls.IsEnabled = _ble.IsConnected && !AnyEffectRunning;
         StateChanged?.Invoke();
     }
 
@@ -571,6 +816,9 @@ public sealed class MainWindow : Window
         if (_shutDown) return;
         _shutDown = true;
         _ambient?.Stop();
+        _rainbow?.Stop();
+        _music?.Stop();
+        _audio?.Dispose();
         _sampler?.Dispose();
         Themes.Changed -= Rebuild;
         _settings.ColorHex = _color.ToHex();

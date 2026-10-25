@@ -135,6 +135,25 @@ These flows are adapted from Airlift's and clockt's `AGENTS.md`.
   is left, and `AmbientController` then holds its current colour instead of easing
   toward black. The 128x72 sample size exists so small coloured elements survive
   the halftone shrink; do not lower it without re-checking selective mode.
+- Rainbow mode (`RainbowController`) steps the hue itself at 25 Hz rather than
+  using the controller's built-in effect codes, which are poorly documented and
+  vary between ELK-BLEDOM units. Its speed is stored as seconds per cycle (3-60)
+  and changes mid-run without a jump. Rainbow and ambient are mutually exclusive:
+  starting one stops the other, and either pauses the manual colour picker.
+- Music mode listens to the default output device through WASAPI loopback
+  (`LoopbackAudioSource`, the NAudio.Wasapi package, Core's only dependency), never
+  a microphone. `MusicAnalyzer` takes its time from the samples, not a wall clock,
+  so tests drive it with synthetic audio; its bass average rises fast (0.1 s) and
+  falls slowly (0.5 s) so a held sound is one beat while kicks each register.
+  Windows delivers no loopback data during silence, so the analyzer treats 200 ms
+  without samples as silence. Ambient, rainbow and music are mutually exclusive
+  (`StopOtherEffects`), and any of them pauses the manual colour picker.
+- Music mode's beat colours (`MusicController.Palette`, saved as hex in
+  `MusicPalette`, in the order picked) replace the hue wheel: each beat steps to
+  the next colour and it holds between beats, keeping its hue and saturation while
+  loudness sets the brightness (so white works). Empty means the whole wheel.
+- Testing music mode end to end plays a short test sound through the speakers;
+  say so before doing it.
 - On-screen sampler tests are only meaningful when nothing fullscreen (a game)
   covers the staged pattern; capture what was actually on screen before trusting
   a result.

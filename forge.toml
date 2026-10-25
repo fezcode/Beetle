@@ -1,6 +1,6 @@
 [app]
 name = "Beetle"
-version = "0.1.0"
+version = "0.1.1"
 id = "com.fezcode.beetle"
 icon = "Beetle.Desktop/Assets/beetle.ico"
 

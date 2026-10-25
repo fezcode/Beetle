@@ -14,6 +14,16 @@ public sealed class AppSettings
     public string Theme { get; set; } = "carapace";
     /// <summary>Ambient colour boost, 0-100%.</summary>
     public int AmbientBoost { get; set; } = 40;
+    /// <summary>Music mode sensitivity, 0-100%.</summary>
+    public int MusicSensitivity { get; set; } = 50;
+    /// <summary>Colours music mode steps through on each beat, as hex, in the order picked. Empty = whole wheel.</summary>
+    public List<string> MusicPalette { get; set; } = [];
+
+    [JsonIgnore]
+    public IReadOnlyList<RgbColor> MusicColors =>
+        MusicPalette.Select(hex => RgbColor.TryParseHex(hex, out var c) ? (RgbColor?)c : null).OfType<RgbColor>().ToList();
+    /// <summary>Seconds per rainbow cycle, 3-60.</summary>
+    public double RainbowCycleSeconds { get; set; } = 10;
     /// <summary>Ambient colour mode, stored by name ("Average" or "Selective") so the file stays readable.</summary>
     public string AmbientMode { get; set; } = nameof(AmbientColorMode.Average);
 

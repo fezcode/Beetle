@@ -31,9 +31,20 @@ other Fezcode apps. No cloud, no account, no background service: just the app an
   - **Sample area**: follow the full screen, the center, an edge, or drag out any area you like.
   - **Colour boost**: brightens and saturates colourful parts of the screen so a dark red reads as
     red on the strip, while dark greys and black stay dark.
+- **Rainbow mode**: cycles the strip smoothly through every colour, from one trip every 60 seconds
+  to one every 3, adjustable while it runs.
+- **Music mode**: reacts to whatever your PC is playing (music, video, games; never the
+  microphone). Loudness sets the brightness, flaring on each hit and fading quickly; each beat
+  moves the colour round the wheel. Beetle adapts to the overall volume, so quiet and loud tracks
+  both move the strip, and a Sensitivity slider sets how strongly it reacts. With nothing playing
+  the strip settles to a dim glow.
+  - **Beat colours**: pick colours from the swatches (or add the Color card's current colour) and
+    each beat jumps to the next one in the order you picked them, holding it until the next beat.
+    Red, white and blue, say, instead of the whole wheel. **All colours** goes back to the wheel.
+- Ambient, rainbow and music mode take turns: starting one stops the others.
 - **Lives in the tray.** Closing the window keeps Beetle running, ambient mode included. Click
   the tray icon to bring it back, or right-click it to turn the strip on or off, start or stop
-  ambient mode, or quit. Launching Beetle again shows the copy that is already running.
+  ambient, rainbow or music mode, or quit. Launching Beetle again shows the copy that is already running.
 - **Two themes**, Carapace and Scarab. Beetle remembers your strip, colour, brightness, sample
   area, boost and theme.
 
@@ -43,7 +54,7 @@ other Fezcode apps. No cloud, no account, no background service: just the app an
 
 ## Install
 
-Run `Beetle-Setup-0.1.0.exe`, attached to the [GitHub releases](https://github.com/fezcode/Beetle/releases).
+Run `Beetle-Setup-0.1.1.exe`, attached to the [GitHub releases](https://github.com/fezcode/Beetle/releases).
 It installs per user, offers Desktop and Start Menu shortcuts, and keeps your settings when you
 uninstall. Beetle is also listed in [Airlift](https://github.com/fezcode/Airlift).
 
@@ -76,7 +87,7 @@ Requires the .NET 10 SDK on Windows.
 .\build.ps1 -Run              # build and launch
 .\build.ps1 -Test             # build and run the tests
 .\build.ps1 -Test -Publish    # tests, then a framework-dependent dist/win-x64/desktop
-.\build-installer.ps1 -SkipBuild   # package dist/installer/Beetle-Setup-0.1.0.exe with Forge
+.\build-installer.ps1 -SkipBuild   # package dist/installer/Beetle-Setup-0.1.1.exe with Forge
 .\version.ps1                 # check the version is consistent everywhere
 ```
 
@@ -96,13 +107,17 @@ See [AGENTS.md](AGENTS.md) for the full release flow.
   average, or in selective mode the average of only the pixels with at least 25% saturation and 15%
   brightness. `AmbientController` applies the colour
   boost, eases the strip toward each sample, and sends a frame only when the colour has moved
-  enough to be worth a write. The strip is a single zone, so it shows one colour at a time.
+  enough to be worth a write.
+- **Music.** `LoopbackAudioSource` captures the default output device through WASAPI loopback (via
+  NAudio) and feeds `MusicAnalyzer`, which measures loudness against a slowly fading peak and counts
+  a beat when the bass (below about 150 Hz) jumps well above its recent average. `MusicController`
+  turns that into brightness and hue about 30 times a second. The strip is a single zone, so it shows one colour at a time.
 
 | Project | Contents |
 |---|---|
-| `Beetle.Core` | Colour maths, selective colour analysis, command frames, Bluetooth transport, screen sampler, controllers, settings. No UI dependency. |
+| `Beetle.Core` | Colour maths, selective colour analysis, music analysis and audio capture, command frames, Bluetooth transport, screen sampler, controllers, settings. No UI dependency. |
 | `Beetle.Desktop` | The Avalonia app: theme, UI helpers, window chrome, colour picker, area picker, tray icon, main window. |
-| `Beetle.Tests` | xUnit tests for frame encoding, colour maths, boost, selective analysis, sample areas and controller behaviour. |
+| `Beetle.Tests` | xUnit tests for frame encoding, colour maths, boost, selective analysis, music analysis, rainbow, sample areas and controller behaviour. |
 
 ## Limits
 
@@ -114,3 +129,4 @@ See [AGENTS.md](AGENTS.md) for the full release flow.
 ## License
 
 [MIT](LICENSE.txt). The bundled fonts, DM Sans and Manrope, keep their own SIL Open Font Licenses.
+[NAudio](https://github.com/naudio/NAudio) is used under the MIT License.

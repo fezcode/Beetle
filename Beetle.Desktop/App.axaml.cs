@@ -43,11 +43,15 @@ public sealed partial class App : Application
         power.Click += async (_, _) => await window.TogglePowerFromTray();
         var ambient = new NativeMenuItem("Start ambient");
         ambient.Click += (_, _) => window.ToggleAmbientFromTray();
+        var rainbow = new NativeMenuItem("Start rainbow");
+        rainbow.Click += (_, _) => window.ToggleRainbowFromTray();
+        var music = new NativeMenuItem("Start music");
+        music.Click += (_, _) => window.ToggleMusicFromTray();
         var quit = new NativeMenuItem("Quit Beetle");
         quit.Click += (_, _) => window.Quit();
 
         var menu = new NativeMenu();
-        foreach (var item in new NativeMenuItemBase[] { show, new NativeMenuItemSeparator(), power, ambient, new NativeMenuItemSeparator(), quit })
+        foreach (var item in new NativeMenuItemBase[] { show, new NativeMenuItemSeparator(), power, ambient, rainbow, music, new NativeMenuItemSeparator(), quit })
             menu.Items.Add(item);
 
         using var icon = AssetLoader.Open(new Uri("avares://Beetle/Assets/beetle.ico"));
@@ -62,8 +66,14 @@ public sealed partial class App : Application
             power.IsEnabled = connected;
             ambient.Header = window.IsAmbientRunning ? "Stop ambient" : "Start ambient";
             ambient.IsEnabled = connected;
+            rainbow.Header = window.IsRainbowRunning ? "Stop rainbow" : "Start rainbow";
+            rainbow.IsEnabled = connected;
+            music.Header = window.IsMusicRunning ? "Stop music" : "Start music";
+            music.IsEnabled = connected;
             tray.ToolTipText = !connected ? "Beetle · not connected"
                 : window.IsAmbientRunning ? $"Beetle · {window.StripName} · ambient on"
+                : window.IsRainbowRunning ? $"Beetle · {window.StripName} · rainbow on"
+                : window.IsMusicRunning ? $"Beetle · {window.StripName} · music on"
                 : $"Beetle · {window.StripName}";
         }
         window.StateChanged += Sync;
