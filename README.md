@@ -54,7 +54,7 @@ other Fezcode apps. No cloud, no account, no background service: just the app an
 
 ## Install
 
-Run `Beetle-Setup-0.1.1.exe`, attached to the [GitHub releases](https://github.com/fezcode/Beetle/releases).
+Run `Beetle-Setup-0.1.2.exe`, attached to the [GitHub releases](https://github.com/fezcode/Beetle/releases).
 It installs per user, offers Desktop and Start Menu shortcuts, and keeps your settings when you
 uninstall. Beetle is also listed in [Airlift](https://github.com/fezcode/Airlift).
 
@@ -87,7 +87,7 @@ Requires the .NET 10 SDK on Windows.
 .\build.ps1 -Run              # build and launch
 .\build.ps1 -Test             # build and run the tests
 .\build.ps1 -Test -Publish    # tests, then a framework-dependent dist/win-x64/desktop
-.\build-installer.ps1 -SkipBuild   # package dist/installer/Beetle-Setup-0.1.1.exe with Forge
+.\build-installer.ps1 -SkipBuild   # package dist/installer/Beetle-Setup-0.1.2.exe with Forge
 .\version.ps1                 # check the version is consistent everywhere
 ```
 
