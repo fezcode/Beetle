@@ -54,7 +54,7 @@ other Fezcode apps. No cloud, no account, no background service: just the app an
 
 ## Install
 
-Run `Beetle-Setup-0.1.2.exe`, attached to the [GitHub releases](https://github.com/fezcode/Beetle/releases).
+Run `Beetle-Setup-0.1.3.exe`, attached to the [GitHub releases](https://github.com/fezcode/Beetle/releases).
 It installs per user, offers Desktop and Start Menu shortcuts, and keeps your settings when you
 uninstall. Beetle is also listed in [Airlift](https://github.com/fezcode/Airlift).
 
@@ -87,7 +87,7 @@ Requires the .NET 10 SDK on Windows.
 .\build.ps1 -Run              # build and launch
 .\build.ps1 -Test             # build and run the tests
 .\build.ps1 -Test -Publish    # tests, then a framework-dependent dist/win-x64/desktop
-.\build-installer.ps1 -SkipBuild   # package dist/installer/Beetle-Setup-0.1.2.exe with Forge
+.\build-installer.ps1 -SkipBuild   # package dist/installer/Beetle-Setup-0.1.3.exe with Forge
 .\version.ps1                 # check the version is consistent everywhere
 ```
 
@@ -102,8 +102,11 @@ See [AGENTS.md](AGENTS.md) for the full release flow.
 - **Protocol.** Commands are the 9-byte ELK-BLEDOM frames, `7E ... EF`, in `LedCommands.cs`. The
   vendor publishes no protocol; these come from community reverse-engineering, so a frame that
   misbehaves on a particular unit is a one-line change there.
-- **Ambient.** `GdiScreenSampler` shrinks the chosen area of the primary monitor to a 128x72 bitmap
-  with a halftone (area-averaging) stretch and reduces it to one colour (`ColorAnalysis`): the plain
+- **Ambient.** `ScreenSampler` shrinks the chosen area of the primary monitor to a 128x72 image and
+  reduces it to one colour (`ColorAnalysis`). The grab uses DXGI Desktop Duplication
+  (`DxgiScreenGrab`): the GPU area-averages the frame down through mipmaps, so the CPU reads only a
+  few kilobytes, and a screen that hasn't changed costs nothing. Where duplication is unavailable it
+  falls back to GDI (`GdiScreenGrab`). The colour is the plain
   average, or in selective mode the average of only the pixels with at least 25% saturation and 15%
   brightness. `AmbientController` applies the colour
   boost, eases the strip toward each sample, and sends a frame only when the colour has moved

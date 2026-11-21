@@ -5,7 +5,7 @@
 This repository is Beetle by Fezcode, a Windows app that controls an ELK-BLEDOM
 Bluetooth LE RGB LED strip, built on C# / .NET 10 / Avalonia 12. A shared
 `Beetle.Core` library holds the colour maths, the strip's command frames, the
-WinRT Bluetooth transport, the GDI screen sampler and the controllers;
+WinRT Bluetooth transport, the screen sampler (DXGI, with a GDI fallback) and the controllers;
 `Beetle.Desktop` is the GUI; `Beetle.Tests` covers the pure logic. There is no
 CLI. Beetle is Windows-only: Bluetooth and the screen grab use Windows APIs.
 
@@ -94,6 +94,9 @@ the Windows asset as `Beetle-Setup-<version>.exe`; keep that filename.
   through its automatically generated Windows uninstall record. Also maintain
   HKCU `Software\fezcode\Beetle` InstallDir and Version values, using
   `${app.version}` for the version, and publish `beetle.ico` for shortcuts.
+- `scripts/verify-installer.ps1` understands Forge 1 (zip, "FORGE" trailer) and Forge 2
+  (zstd, "FRGTRL2A/B" trailer) bundles; for Forge 2 it checks the SHA-256 itself and reads
+  the manifest through `forge inspect`, so it needs `../Forge/build/forge.exe`.
 - Packaging verifies the embedded manifest (`scripts/verify-installer.ps1`), not
   only the source TOML or EXE timestamp. A successful diagnostic is not a
   substitute for checking the visible wizard.
@@ -134,14 +137,26 @@ These flows are adapted from Airlift's and clockt's `AGENTS.md`.
   (dropping black, white and greys). Selective returns null when nothing coloured
   is left, and `AmbientController` then holds its current colour instead of easing
   toward black. The 128x72 sample size exists so small coloured elements survive
-  the halftone shrink; do not lower it without re-checking selective mode.
+  the shrink; do not lower it without re-checking selective mode.
+- `ScreenSampler` grabs through `DxgiScreenGrab` (Desktop Duplication via the
+  Vortice.Direct3D11 package): the GPU builds mips of the region and only the
+  smallest mip still >= 128x72 is read back, then `PixelResample.AreaAverage`
+  finishes on the CPU. No new frame means `Unchanged`, and the last image is
+  reused, so a still screen is nearly free. A lost duplication (UAC, lock screen,
+  mode change) is rebuilt with back-off; a rotated display, non-BGRA desktop or
+  refused duplication returns `Unsupported` and the sampler switches to
+  `GdiScreenGrab` for good. GDI reads the whole region back from the compositor
+  (about 30 ms CPU at 4K), so it point-samples to 512x288 and area-averages from
+  there; avoid a one-step HALFTONE stretch, which costs about twice the CPU.
+- Effect previews reach the UI through `MainWindow.QueuePreview`: at most one
+  update queued at a time, none while the window is hidden or minimised.
 - Rainbow mode (`RainbowController`) steps the hue itself at 25 Hz rather than
   using the controller's built-in effect codes, which are poorly documented and
   vary between ELK-BLEDOM units. Its speed is stored as seconds per cycle (3-60)
   and changes mid-run without a jump. Rainbow and ambient are mutually exclusive:
   starting one stops the other, and either pauses the manual colour picker.
 - Music mode listens to the default output device through WASAPI loopback
-  (`LoopbackAudioSource`, the NAudio.Wasapi package, Core's only dependency), never
+  (`LoopbackAudioSource`, the NAudio.Wasapi package), never
   a microphone. `MusicAnalyzer` takes its time from the samples, not a wall clock,
   so tests drive it with synthetic audio; its bass average rises fast (0.1 s) and
   falls slowly (0.5 s) so a held sound is one beat while kicks each register.

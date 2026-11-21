@@ -1,8 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- BLE comes from the Windows SDK projection the TFM pulls in, and the screen grab uses GDI
-       through P/Invoke. The one package is NAudio's WASAPI layer, for music mode's loopback capture
-       of what the PC is playing. -->
+  <!-- BLE comes from the Windows SDK projection the TFM pulls in. Packages: NAudio's WASAPI layer, for
+       music mode's loopback capture of what the PC is playing, and Vortice's Direct3D 11 / DXGI
+       bindings, for ambient mode's GPU screen grab (Desktop Duplication). The GDI fallback grab uses
+       P/Invoke. -->
   <ItemGroup>
     <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
   </ItemGroup>
 </Project>

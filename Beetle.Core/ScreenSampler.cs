@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace Beetle.Core;
 
 /// <summary>One representative colour for whatever is on screen right now.</summary>
@@ -10,127 +8,171 @@ public interface IScreenSampler : IDisposable
     RgbColor? Sample();
 }
 
+/// <summary>What one attempt to grab the screen produced.</summary>
+public enum GrabResult
+{
+    /// <summary>The pixel buffer now holds a fresh image of the region.</summary>
+    New,
+    /// <summary>Nothing on screen changed since the last grab; the previous image still stands.</summary>
+    Unchanged,
+    /// <summary>No image this time (a desktop switch, a display change); worth trying again later.</summary>
+    Failed,
+    /// <summary>This grab method cannot work here at all; use another one.</summary>
+    Unsupported,
+}
+
+/// <summary>A way of shrinking a region of the primary monitor to <see cref="ScreenSampler.SampleWidth"/> x
+/// <see cref="ScreenSampler.SampleHeight"/> BGRA pixels. Called from one thread at a time.</summary>
+public interface IScreenGrab : IDisposable
+{
+    GrabResult Grab(SampleRegion region, Span<byte> bgra);
+}
+
 /// <summary>
-/// Grabs the chosen <see cref="Region"/> of the primary monitor through GDI and lets the graphics layer
-/// shrink it to a small image with a halftone (area-averaging) stretch, then reduces that image to one
-/// colour by <see cref="Mode"/> (see <see cref="ColorAnalysis"/>), cheaply enough to run many times a second.
+/// Samples the chosen <see cref="Region"/> of the primary monitor and reduces it to one colour by
+/// <see cref="Mode"/> (see <see cref="ColorAnalysis"/>).
+///
+/// The grab prefers <see cref="DxgiScreenGrab"/>: Desktop Duplication hands over the desktop as a GPU
+/// texture and the GPU shrinks it, so the CPU reads a few kilobytes instead of a whole 4K frame, and a
+/// screen that hasn't changed costs nothing at all. Where that is unavailable (no hardware D3D11, a
+/// rotated display, a remote session that refuses duplication) it falls back to <see cref="GdiScreenGrab"/>.
+///
 /// The image is fine enough (128x72) that a small coloured element survives the shrink as coloured
 /// pixels instead of being blended into the grey around it, which selective mode depends on.
-///
-/// GDI is used directly rather than System.Drawing so Core needs no extra package, and the
-/// off-screen device context and bitmap are created once and reused for every frame.
 /// </summary>
-public sealed class GdiScreenSampler : IScreenSampler
+public sealed class ScreenSampler : IScreenSampler
 {
-    private const int SampleWidth = 128;
-    private const int SampleHeight = 72;
+    public const int SampleWidth = 128;
+    public const int SampleHeight = 72;
 
-    private readonly IntPtr _screenDc;
-    private readonly IntPtr _memoryDc;
-    private readonly IntPtr _bitmap;
-    private readonly IntPtr _previousBitmap;
+    private readonly Lock _gate = new();
     private readonly byte[] _pixels = new byte[SampleWidth * SampleHeight * 4];
-    private readonly Lock _regionLock = new();
+    private readonly Func<IScreenGrab> _fallback;
+    private IScreenGrab? _grab;
+    private bool _usingFallback;
+    private bool _hasPixels;
     private SampleRegion _region = SampleRegion.Full;
     private AmbientColorMode _mode = AmbientColorMode.Average;
     private bool _disposed;
 
+    /// <summary>The DXGI grab with a GDI fallback: what the app uses.</summary>
+    public ScreenSampler() : this(DxgiScreenGrab.TryCreate, () => new GdiScreenGrab()) { }
+
+    /// <summary>For tests: <paramref name="primary"/> may return null, meaning "unavailable, use the fallback".</summary>
+    public ScreenSampler(Func<IScreenGrab?> primary, Func<IScreenGrab> fallback)
+    {
+        _fallback = fallback;
+        _grab = primary();
+        if (_grab is null) UseFallback();
+    }
+
     /// <summary>The part of the primary monitor to sample. Safe to change while sampling runs.</summary>
     public SampleRegion Region
     {
-        get { lock (_regionLock) return _region; }
-        set { lock (_regionLock) _region = value.Normalize(); }
+        get { lock (_gate) return _region; }
+        set { lock (_gate) _region = value.Normalize(); }
     }
 
     /// <summary>How the sampled pixels become one colour. Safe to change while sampling runs.</summary>
     public AmbientColorMode Mode
     {
-        get { lock (_regionLock) return _mode; }
-        set { lock (_regionLock) _mode = value; }
+        get { lock (_gate) return _mode; }
+        set { lock (_gate) _mode = value; }
     }
 
-    public GdiScreenSampler()
-    {
-        _screenDc = GetDC(IntPtr.Zero);
-        _memoryDc = CreateCompatibleDC(_screenDc);
-        _bitmap = CreateCompatibleBitmap(_screenDc, SampleWidth, SampleHeight);
-        _previousBitmap = SelectObject(_memoryDc, _bitmap);
-    }
+    /// <summary>True once the sampler has given up on the GPU grab and is using GDI.</summary>
+    public bool UsingFallback { get { lock (_gate) return _usingFallback; } }
 
     public RgbColor? Sample()
     {
-        if (_disposed) return null;
-
-        var screenWidth = GetSystemMetrics(SM_CXSCREEN);
-        var screenHeight = GetSystemMetrics(SM_CYSCREEN);
-        if (screenWidth <= 0 || screenHeight <= 0) return null;
-
-        // HALFTONE averages the source block behind each destination pixel, so the shrink itself
-        // does most of the averaging work; SetBrushOrgEx is required after choosing that mode.
-        var (srcX, srcY, srcW, srcH) = Region.ToPixels(screenWidth, screenHeight);
-        SetStretchBltMode(_memoryDc, STRETCH_HALFTONE);
-        SetBrushOrgEx(_memoryDc, 0, 0, IntPtr.Zero);
-        if (!StretchBlt(_memoryDc, 0, 0, SampleWidth, SampleHeight, _screenDc, srcX, srcY, srcW, srcH, SRCCOPY))
-            return null;
-
-        var header = new BITMAPINFOHEADER
+        // One lock for the whole sample: an ambient loop that is stopping can still be mid-grab when
+        // the next one starts, and neither grab backend may be used from two threads at once.
+        lock (_gate)
         {
-            biSize = (uint)Marshal.SizeOf<BITMAPINFOHEADER>(),
-            biWidth = SampleWidth,
-            biHeight = -SampleHeight, // negative: top-down, so row order doesn't matter here
-            biPlanes = 1,
-            biBitCount = 32,
-            biCompression = BI_RGB,
-        };
-        if (GetDIBits(_memoryDc, _bitmap, 0, SampleHeight, _pixels, ref header, DIB_RGB_COLORS) == 0)
-            return null;
+            if (_disposed || _grab is null) return null;
+            var result = _grab.Grab(_region, _pixels);
+            if (result == GrabResult.Unsupported && !_usingFallback)
+            {
+                UseFallback();
+                result = _grab.Grab(_region, _pixels);
+            }
+            switch (result)
+            {
+                case GrabResult.New: _hasPixels = true; break;
+                case GrabResult.Unchanged when _hasPixels: break;
+                default: return null;
+            }
+            return ColorAnalysis.Reduce(_pixels, _mode); // both grabs hand back BGRA
+        }
+    }
 
-        return ColorAnalysis.Reduce(_pixels, Mode); // GDI packs the pixels as BGRA
+    private void UseFallback()
+    {
+        _grab?.Dispose();
+        _grab = _fallback();
+        _usingFallback = true;
+        _hasPixels = false;
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        SelectObject(_memoryDc, _previousBitmap);
-        DeleteObject(_bitmap);
-        DeleteDC(_memoryDc);
-        ReleaseDC(IntPtr.Zero, _screenDc);
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _grab?.Dispose();
+            _grab = null;
+        }
+    }
+}
+
+/// <summary>Pure pixel helpers for the grabs, tested without a screen.</summary>
+public static class PixelResample
+{
+    /// <summary>
+    /// Area-averages a BGRA image (rows <paramref name="srcStride"/> bytes apart) into a tightly packed
+    /// <paramref name="dstWidth"/> x <paramref name="dstHeight"/> BGRA image. Each destination pixel is the
+    /// mean of the source block behind it; when the source is smaller, pixels repeat.
+    /// </summary>
+    public static void AreaAverage(ReadOnlySpan<byte> src, int srcWidth, int srcHeight, int srcStride,
+        Span<byte> dst, int dstWidth, int dstHeight)
+    {
+        if (srcWidth <= 0 || srcHeight <= 0) { dst.Clear(); return; }
+        for (var dy = 0; dy < dstHeight; dy++)
+        {
+            var y0 = dy * srcHeight / dstHeight;
+            var y1 = Math.Max(y0 + 1, (dy + 1) * srcHeight / dstHeight);
+            for (var dx = 0; dx < dstWidth; dx++)
+            {
+                var x0 = dx * srcWidth / dstWidth;
+                var x1 = Math.Max(x0 + 1, (dx + 1) * srcWidth / dstWidth);
+                int b = 0, g = 0, r = 0;
+                for (var y = y0; y < y1; y++)
+                {
+                    var row = y * srcStride;
+                    for (var x = x0; x < x1; x++)
+                    {
+                        var i = row + x * 4;
+                        b += src[i]; g += src[i + 1]; r += src[i + 2];
+                    }
+                }
+                var count = (y1 - y0) * (x1 - x0);
+                var o = (dy * dstWidth + dx) * 4;
+                dst[o] = (byte)(b / count);
+                dst[o + 1] = (byte)(g / count);
+                dst[o + 2] = (byte)(r / count);
+                dst[o + 3] = 255;
+            }
+        }
     }
 
-    private const int SM_CXSCREEN = 0;
-    private const int SM_CYSCREEN = 1;
-    private const int STRETCH_HALFTONE = 4;
-    private const uint SRCCOPY = 0x00CC0020;
-    private const uint BI_RGB = 0;
-    private const uint DIB_RGB_COLORS = 0;
-
-    [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hWnd);
-    [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDc);
-    [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
-    [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr hDc);
-    [DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr hDc);
-    [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleBitmap(IntPtr hDc, int width, int height);
-    [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr hObject);
-    [DllImport("gdi32.dll")] private static extern IntPtr SelectObject(IntPtr hDc, IntPtr hObject);
-    [DllImport("gdi32.dll")] private static extern int SetStretchBltMode(IntPtr hDc, int mode);
-    [DllImport("gdi32.dll")] private static extern bool SetBrushOrgEx(IntPtr hDc, int x, int y, IntPtr point);
-    [DllImport("gdi32.dll")] private static extern bool StretchBlt(IntPtr dstDc, int dstX, int dstY, int dstW, int dstH, IntPtr srcDc, int srcX, int srcY, int srcW, int srcH, uint rop);
-    [DllImport("gdi32.dll")] private static extern int GetDIBits(IntPtr hDc, IntPtr bitmap, uint startScan, uint scanLines, byte[] bits, ref BITMAPINFOHEADER info, uint usage);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct BITMAPINFOHEADER
+    /// <summary>The smallest mip level of a <paramref name="width"/> x <paramref name="height"/> texture that
+    /// is still at least <paramref name="minWidth"/> x <paramref name="minHeight"/> (0 when even the full size
+    /// is smaller). Mip level n is (width &gt;&gt; n) x (height &gt;&gt; n), each at least 1.</summary>
+    public static int MipLevelFor(int width, int height, int minWidth, int minHeight)
     {
-        public uint biSize;
-        public int biWidth;
-        public int biHeight;
-        public ushort biPlanes;
-        public ushort biBitCount;
-        public uint biCompression;
-        public uint biSizeImage;
-        public int biXPelsPerMeter;
-        public int biYPelsPerMeter;
-        public uint biClrUsed;
-        public uint biClrImportant;
+        var level = 0;
+        while ((width >> (level + 1)) >= minWidth && (height >> (level + 1)) >= minHeight) level++;
+        return level;
     }
 }

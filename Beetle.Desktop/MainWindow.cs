@@ -18,7 +18,7 @@ public sealed class MainWindow : Window
     private readonly AppSettings _settings;
     private readonly BleStrip _ble = new();
     private readonly StripController _strip;
-    private GdiScreenSampler? _sampler;
+    private ScreenSampler? _sampler;
     private AmbientController? _ambient;
     private RainbowController? _rainbow;
     private MusicController? _music;
@@ -96,6 +96,11 @@ public sealed class MainWindow : Window
 
         Rebuild();
         Opened += (_, _) => BringToFront();
+        Opened += (_, _) => UpdatePreviewLive();
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty || e.Property == WindowStateProperty) UpdatePreviewLive();
+        };
         Opened += async (_, _) => await ScanAsync(autoConnect: true);
         // Beetle lives in the tray: closing the window hides it and the strip keeps going (ambient
         // included). Only Quit, or Windows/the app shutting down, really ends it.
@@ -611,15 +616,11 @@ public sealed class MainWindow : Window
     {
         if (!_ble.IsConnected) return;
         StopOtherEffects(keep: "ambient");
-        _sampler ??= new GdiScreenSampler();
+        _sampler ??= new ScreenSampler();
         _sampler.Region = _settings.Region;
         _sampler.Mode = _settings.ColorMode;
         _ambient = new AmbientController(_strip, _sampler) { Boost = _settings.AmbientBoost / 100d };
-        _ambient.Sampled += color => Dispatcher.UIThread.Post(() =>
-        {
-            _ambientSwatch.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
-            ShowColor(color);
-        });
+        _ambient.Sampled += color => QueuePreview(() => _ambientSwatch, color);
         _ambient.Faulted += error => Dispatcher.UIThread.Post(() => { StopAmbient(); Notice(error.Message, true); });
         _ambient.Start();
         UpdatePowerUi();
@@ -646,11 +647,7 @@ public sealed class MainWindow : Window
         if (!_ble.IsConnected) return;
         StopOtherEffects(keep: "rainbow");
         _rainbow = new RainbowController(_strip) { CycleSeconds = _settings.RainbowCycleSeconds };
-        _rainbow.Sampled += color => Dispatcher.UIThread.Post(() =>
-        {
-            _rainbowSwatch.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
-            ShowColor(color);
-        });
+        _rainbow.Sampled += color => QueuePreview(() => _rainbowSwatch, color);
         _rainbow.Faulted += error => Dispatcher.UIThread.Post(() => { StopRainbow(); Notice(error.Message, true); });
         _rainbow.Start();
         UpdatePowerUi();
@@ -678,11 +675,7 @@ public sealed class MainWindow : Window
         StopOtherEffects(keep: "music");
         _audio ??= new LoopbackAudioSource();
         var music = new MusicController(_strip, _audio) { Sensitivity = _settings.MusicSensitivity / 100d, Palette = _settings.MusicColors };
-        music.Sampled += color => Dispatcher.UIThread.Post(() =>
-        {
-            _musicSwatch.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
-            ShowColor(color);
-        });
+        music.Sampled += color => QueuePreview(() => _musicSwatch, color);
         music.Faulted += error => Dispatcher.UIThread.Post(() => { StopMusic(); Notice(error.Message, true); });
         try { music.Start(); }
         catch (Exception error)
@@ -725,8 +718,47 @@ public sealed class MainWindow : Window
 
     private void ShowColor(RgbColor color)
     {
-        _previewSwatch.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
-        if (!_hexBox.IsFocused) _hexBox.Text = color.ToHex();
+        Paint(_previewSwatch, color);
+        var hex = color.ToHex();
+        if (!_hexBox.IsFocused && _hexBox.Text != hex) _hexBox.Text = hex;
+    }
+
+    /// <summary>Gives a swatch a colour, leaving it untouched (no new brush, no redraw) when it already has it.
+    /// A fresh brush rather than a recoloured one, because a swatch may still hold a shared theme brush.</summary>
+    private static void Paint(Border swatch, RgbColor color)
+    {
+        var target = Color.FromRgb(color.R, color.G, color.B);
+        if (swatch.Background is SolidColorBrush { Color: var current } && current == target) return;
+        swatch.Background = new SolidColorBrush(target);
+    }
+
+    // ---- live preview ---------------------------------------------------------
+    // The effect loops report a colour 25-30 times a second from background threads. Only the newest one
+    // matters, so at most one update waits on the UI thread at a time, and none are queued at all while
+    // the window is hidden in the tray or minimised: the strip keeps going without any UI work.
+
+    private sealed record PreviewUpdate(Func<Border> Swatch, RgbColor Color);
+
+    private volatile bool _previewLive;
+    private PreviewUpdate? _pendingPreview;
+    private int _previewQueued;
+
+    private void UpdatePreviewLive() => _previewLive = IsVisible && WindowState != WindowState.Minimized;
+
+    private void QueuePreview(Func<Border> swatch, RgbColor color)
+    {
+        if (!_previewLive) return;
+        Volatile.Write(ref _pendingPreview, new PreviewUpdate(swatch, color));
+        if (Interlocked.Exchange(ref _previewQueued, 1) == 0)
+            Dispatcher.UIThread.Post(FlushPreview, DispatcherPriority.Background);
+    }
+
+    private void FlushPreview()
+    {
+        Volatile.Write(ref _previewQueued, 0);
+        if (Interlocked.Exchange(ref _pendingPreview, null) is not { } update || !_previewLive) return;
+        Paint(update.Swatch(), update.Color);
+        ShowColor(update.Color);
     }
 
     private void UpdateConnectionUi()
