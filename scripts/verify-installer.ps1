@@ -83,7 +83,7 @@ else {
 }
 
 if ($manifest.app.id -ne 'com.fezcode.beetle' -or $manifest.app.version -ne $Version) { throw 'Incorrect installer identity/version.' }
-if ($manifest.ui.theme -ne 'huh') { throw 'Installer must use the huh theme.' }
+if ($manifest.ui.theme -ne 'glass') { throw 'Installer must use the glass theme.' }
 if ($destinations -contains '${INSTALLDIR}/coreclr.dll') { throw 'Installer bundles a .NET runtime; Beetle must be framework-dependent.' }
 if (($manifest.steps.type -join ',') -ne 'welcome,license,folder,shortcuts,install,finish') { throw 'Installer must contain all six wizard steps in order.' }
 if ($licenseText -notmatch 'MIT License') { throw 'MIT license agreement is missing.' }
