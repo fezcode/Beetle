@@ -11,7 +11,7 @@ homepage = "https://github.com/fezcode/Beetle"
 support_url = "https://github.com/fezcode/Beetle/issues"
 
 [ui]
-theme = "huh"
+theme = "glass"
 window_title = "Beetle Setup"
 
 [install]
